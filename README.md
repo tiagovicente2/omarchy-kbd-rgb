@@ -58,33 +58,21 @@ echo asus-nb-wmi | sudo tee /etc/modules-load.d/asus-nb-wmi.conf
 
 ## Install
 
-From a checkout of this repo:
+### Recommended (1-step install via Omarchy):
+
+```bash
+omarchy plugin add https://github.com/tiagovicente2/omarchy-kbd-rgb --enable
+```
+
+### Manual Install:
 
 ```bash
 mkdir -p ~/.config/omarchy/plugins/omarchy-kbd-rgb
 cp manifest.json Service.qml Model.js sni.py ~/.config/omarchy/plugins/omarchy-kbd-rgb/
-omarchy-shell shell rescanPlugins
+omarchy plugin enable omarchy-kbd-rgb
 ```
 
-Then enable it by adding its id to `plugins[]` in
-`~/.config/omarchy/shell.json`:
-
-```json
-{
-  "plugins": [
-    { "id": "omarchy-kbd-rgb" }
-  ]
-}
-```
-
-The shell hot-reloads `shell.json` on save. Verify with:
-
-```bash
-omarchy-shell shell listPlugins | grep omarchy-kbd-rgb
-```
-
-A keyboard icon should appear in the system tray. Restart the shell if it does
-not: `omarchy restart shell`.
+A keyboard icon will appear in your system tray. Restart the shell if needed: `omarchy restart shell`.
 
 ## Usage & IPC Commands
 
