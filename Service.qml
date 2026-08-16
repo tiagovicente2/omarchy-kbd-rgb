@@ -81,14 +81,16 @@ Item {
 
   // --------------------------------------------- smart automation listeners
 
-  // Night Light warm tint synchronization
+  // Night Light warm tint synchronization (uses pure warm amber FF7700 with zero blue light)
+  readonly property string nightLightHex: "FF7700"
+
   onIsNightlightActiveChanged: {
     if (!root.nightLightSync) return
     if (root.isNightlightActive && root.mode === "static") {
       if (root.savedPreNightLightHex === "") {
         root.savedPreNightLightHex = root.hex
       }
-      root.setHex("FFE0B2")
+      root.setHex(root.nightLightHex)
     } else if (!root.isNightlightActive && root.savedPreNightLightHex !== "") {
       root.setHex(root.savedPreNightLightHex)
       root.savedPreNightLightHex = ""

@@ -1,9 +1,9 @@
 var PRESETS = [
   { name: "White", hex: "FFFFFF" },
-  { name: "Warm White", hex: "FFE0B2" },
+  { name: "Warm Amber", hex: "FF8800" },
   { name: "Crimson", hex: "FF1744" },
-  { name: "Sunset Orange", hex: "FF6D00" },
-  { name: "Cyber Amber", hex: "FFD600" },
+  { name: "Sunset Orange", hex: "FF5500" },
+  { name: "Cyber Gold", hex: "FFD600" },
   { name: "Neon Green", hex: "00E676" },
   { name: "Cyan Teal", hex: "00E5FF" },
   { name: "Sky Blue", hex: "00B0FF" },
