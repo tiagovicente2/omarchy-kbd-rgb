@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Services.UPower
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
@@ -22,11 +23,18 @@ Item {
   property int brightness: 100
   property string mode: "static"
   property bool followTheme: false
+  property bool batterySaver: false
+  property bool nightLightSync: false
+  property string savedPreNightLightHex: ""
+  property int savedPreBatterySaverBrightness: -1
   property bool opened: false
   property bool persistOnIdle: false
   property var queue: []
   property bool vrgbAvailable: true
   property string applyError: ""
+
+  readonly property var nightlightService: shell ? shell.firstPartyServiceFor("omarchy.nightlight") : null
+  readonly property bool isNightlightActive: !!(nightlightService && nightlightService.enabled)
 
   readonly property string pluginDir: {
     var dir = root.manifest && root.manifest.__sourceDir
@@ -68,6 +76,43 @@ Item {
       root.hex = accentHex
       if (root.mode === "off" || root.mode === "rainbow") root.mode = "static"
       apply()
+    }
+  }
+
+  // --------------------------------------------- smart automation listeners
+
+  // Night Light warm tint synchronization
+  onIsNightlightActiveChanged: {
+    if (!root.nightLightSync) return
+    if (root.isNightlightActive && root.mode === "static") {
+      if (root.savedPreNightLightHex === "") {
+        root.savedPreNightLightHex = root.hex
+      }
+      root.setHex("FFE0B2")
+    } else if (!root.isNightlightActive && root.savedPreNightLightHex !== "") {
+      root.setHex(root.savedPreNightLightHex)
+      root.savedPreNightLightHex = ""
+    }
+  }
+
+  // Battery Saver (cap brightness on low battery)
+  readonly property bool isLowBattery: {
+    var dev = UPower.displayDevice
+    return !!(UPower.onBattery && dev && dev.isPresent && dev.percentage <= 25)
+  }
+
+  onIsLowBatteryChanged: {
+    if (!root.batterySaver) return
+    if (root.isLowBattery && root.mode !== "off") {
+      if (root.savedPreBatterySaverBrightness < 0) {
+        root.savedPreBatterySaverBrightness = root.brightness
+      }
+      if (root.brightness > 33) {
+        root.setBrightness(33)
+      }
+    } else if (!root.isLowBattery && root.savedPreBatterySaverBrightness >= 0) {
+      root.setBrightness(root.savedPreBatterySaverBrightness)
+      root.savedPreBatterySaverBrightness = -1
     }
   }
 
@@ -230,6 +275,8 @@ Item {
     function setMode(modeStr: string): string { root.setMode(modeStr); return "ok" }
     function applyThemeAccent(): string { root.setMode("theme"); return "ok" }
     function setFollowTheme(enabled: bool): string { root.followTheme = enabled; if (enabled) root.applyThemeAccent(); return "ok" }
+    function setBatterySaver(enabled: bool): string { root.batterySaver = enabled; return "ok" }
+    function setNightLightSync(enabled: bool): string { root.nightLightSync = enabled; return "ok" }
     function stepBrightness(delta: int): string {
       var next = Math.max(0, Math.min(100, root.brightness + delta))
       root.setBrightness(next)
@@ -263,6 +310,8 @@ Item {
         brightness: root.brightness,
         mode: root.mode,
         followTheme: root.followTheme,
+        batterySaver: root.batterySaver,
+        nightLightSync: root.nightLightSync,
         opened: root.opened,
         vrgb: root.vrgbAvailable
       })
@@ -384,7 +433,7 @@ Item {
         x: card.borderLeft + Style.space(16)
         y: card.borderTop + Style.space(16)
         width: parent.width - card.borderLeft - card.borderRight - Style.space(32)
-        spacing: Style.space(14)
+        spacing: Style.space(12)
 
         // ==================== Header Hero ====================
         Item {
@@ -791,6 +840,50 @@ Item {
                 }
               }
             }
+          }
+        }
+
+        PanelSeparator {
+          foreground: root.foreground
+        }
+
+        // ==================== Smart Automations ====================
+        Row {
+          width: parent.width
+          spacing: Style.space(8)
+
+          readonly property real autoBtnWidth: (width - spacing) / 2
+
+          Button {
+            width: parent.autoBtnWidth
+            text: "Battery Saver"
+            iconText: "󰁹"
+            fontSize: Style.font.caption
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            horizontalPadding: Style.space(6)
+            verticalPadding: Style.space(6)
+            bordered: true
+            selected: root.batterySaver
+            active: root.batterySaver
+            onClicked: root.batterySaver = !root.batterySaver
+            tooltipText: "Cap brightness to 33% when battery is low (≤25%)"
+          }
+
+          Button {
+            width: parent.autoBtnWidth
+            text: "Night Light"
+            iconText: "󰖔"
+            fontSize: Style.font.caption
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            horizontalPadding: Style.space(6)
+            verticalPadding: Style.space(6)
+            bordered: true
+            selected: root.nightLightSync
+            active: root.nightLightSync
+            onClicked: root.nightLightSync = !root.nightLightSync
+            tooltipText: "Warm keyboard color automatically when Night Light is active"
           }
         }
 
