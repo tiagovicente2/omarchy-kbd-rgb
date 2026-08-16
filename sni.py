@@ -64,8 +64,15 @@ def open_panel():
         pass
 
 
+_PIXMAP_CACHE = {}
+
+
 def render_keyboard_icon(color_hex="FFFFFF", mode="static", size=PIXMAP_SIZE):
     """Renders a 22x22 ARGB32 keyboard icon with current color or rainbow gradient."""
+    cache_key = ((color_hex or "FFFFFF").strip().upper(), mode, size)
+    if cache_key in _PIXMAP_CACHE:
+        return _PIXMAP_CACHE[cache_key]
+
     if not HAS_CAIRO:
         # Fallback solid color
         hexstr = (color_hex or "FFFFFF").strip().lstrip("#")
@@ -78,7 +85,9 @@ def render_keyboard_icon(color_hex="FFFFFF", mode="static", size=PIXMAP_SIZE):
         except ValueError:
             r, g, b = 255, 255, 255
         pixel = bytes((255, r, g, b))
-        return size, size, pixel * (size * size)
+        res = (size, size, pixel * (size * size))
+        _PIXMAP_CACHE[cache_key] = res
+        return res
 
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
     ctx = cairo.Context(surface)
@@ -148,7 +157,9 @@ def render_keyboard_icon(color_hex="FFFFFF", mode="static", size=PIXMAP_SIZE):
     out[1::4] = raw[2::4]  # R
     out[2::4] = raw[1::4]  # G
     out[3::4] = raw[0::4]  # B
-    return size, size, bytes(out)
+    res = (size, size, bytes(out))
+    _PIXMAP_CACHE[cache_key] = res
+    return res
 
 
 class KbdBrightnessSync:
@@ -201,8 +212,8 @@ class KbdBrightnessSync:
         if init_val is not None:
             self.last_val = init_val
 
-        # 250ms timer to catch direct ACPI sysfs changes
-        GLib.timeout_add(250, self._poll_sysfs)
+        # 750ms fallback timer to catch direct ACPI sysfs changes without waking CPU unnecessarily
+        GLib.timeout_add(750, self._poll_sysfs)
 
     def _read_current_raw(self):
         try:

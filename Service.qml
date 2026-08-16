@@ -74,6 +74,11 @@ Item {
   // ------------------------------------------------------------ vrgb apply
 
   function enqueue(cmd) {
+    if (cmd.length >= 2 && (cmd[1] === "set" || cmd[1] === "brightness")) {
+      root.queue = root.queue.filter(function(c) {
+        return !(c.length >= 2 && (c[1] === "set" || c[1] === "brightness"))
+      })
+    }
     root.queue.push(cmd)
     pump()
   }
