@@ -1,107 +1,76 @@
 # omarchy-kbd-rgb
 
-An [Omarchy](https://omarchy.org/) Quattro shell plugin that controls the RGB
-keyboard backlight on ASUS Vivobook laptops over the **HID LampArray** interface
-(ITE5570 controller), using [VRGB](https://github.com/vrgb-dev/vrgb).
+RGB keyboard backlight control service and control panel for **ASUS Vivobook** laptops on [Omarchy](https://omarchy.org/) (HID LampArray via [VRGB](https://github.com/vrgb-dev/vrgb)).
 
-The plugin runs as a shell **service** that:
+---
 
-- registers a **vector system tray icon** (freedesktop StatusNotifierItem) that renders
-  a sharp, anti-aliased keyboard illuminated in your active color (or rainbow gradient in rainbow mode);
-- provides **two-way hardware brightness key synchronization** (via UPower DBus and sysfs);
-- provides a **Theme Accent mode** that automatically tracks your active Omarchy theme's accent color;
-- provides **Smart Automations**: Battery Saver (auto-caps brightness on low battery) and Night Light Warm Tint Sync (zero-blue warm amber);
-- opens a modern control panel on click — 12-color curated palette with contrast indicators, custom hex input,
-  brightness slider with quick step buttons, and Theme / Static / Rainbow / Off modes;
-- reapplies your color after a reboot or full power cycle, surviving firmware power resets.
+## ✨ Features
 
-The keyboard on these laptops does **not** speak the ASUS WMI dialect that
-`asusctl`/OpenRGB use for ROG and TUF laptops — it exposes the Microsoft HID
-LampArray protocol instead. That is why this plugin shells out to `vrgb`
-rather than the usual ASUS tools.
+- **🎨 Modern Control Panel**: 12 curated presets with dynamic contrast checkmarks, custom hex input with validation, and smooth brightness controls.
+- **󰏘 Theme Accent Mode**: Automatically matches and tracks your active Omarchy theme accent color in real time.
+- **⌨️ Vector Tray Icon**: Dynamic 22×22 StatusNotifierItem keyboard icon rendered in Cairo, illuminated with your active color, dynamic rainbow wave, or off state.
+- **⚡ Hardware Hotkey Sync**: Full bidirectional sync with laptop Fn brightness hotkeys (<kbd>Fn</kbd>+<kbd>F7</kbd> / <kbd>Fn</kbd>+<kbd>F4</kbd>) via UPower DBus.
+- **🔋 Battery Saver**: Automatically caps keyboard backlight to 33% when battery level is low ($\le 25\%$) and restores on AC power.
+- **🌙 Night Light Warm Tint**: Automatically transitions to zero-blue warm amber (`#FF7700`) during Night Light to reduce eye strain.
+- **💾 Boot Persistence**: Automatically reapplies your color and brightness after reboot or firmware power resets.
 
-## How it works
+---
 
-```
-omarchy-shell (service)
-├── Service.qml   state + vrgb apply queue + control window (PanelWindow)
-└── sni.py        StatusNotifierItem (Cairo vector tray icon) + UPower DBus hotkey sync
-                        │ left/right click
-                        ▼
-        omarchy-shell omarchy-kbd-rgb toggle
-```
+## 🚀 Quick Install
 
-The tray icon is a real StatusNotifierItem, so it appears inside the existing
-`omarchy.tray` widget and is pinnable/hidable like any other tray app.
-
-## Prerequisites
-
-Install VRGB (Arch-based systems first):
-
-```bash
-paru -S vrgb 2>/dev/null || {
-  git clone https://github.com/vrgb-dev/vrgb /tmp/vrgb
-  cd /tmp/vrgb && sudo ./install.sh
-}
-sudo udevadm control --reload-rules && sudo udevadm trigger
-vrgb set ff0000 100   # sanity check: keyboard turns red
-```
-
-The helper also needs `python3` with `dbus-python` and `pycairo` (pre-installed on
-Omarchy). Some ITE5570 systems ignore HID commands until the ASUS WMI module
-has been loaded. If color changes do nothing:
-
-```bash
-sudo modprobe asus-nb-wmi
-echo asus-nb-wmi | sudo tee /etc/modules-load.d/asus-nb-wmi.conf
-```
-
-## Install
-
-### Recommended (1-step install via Omarchy):
+Install in one command using the Omarchy CLI:
 
 ```bash
 omarchy plugin add https://github.com/tiagovicente2/omarchy-kbd-rgb --enable
 ```
 
-### Manual Install:
+*(To update in the future: `omarchy plugin update omarchy-kbd-rgb`)*.
+
+---
+
+## ⚙️ Prerequisites
+
+Ensure **VRGB** and the ASUS WMI kernel module are installed:
 
 ```bash
-mkdir -p ~/.config/omarchy/plugins/omarchy-kbd-rgb
-cp manifest.json Service.qml Model.js sni.py ~/.config/omarchy/plugins/omarchy-kbd-rgb/
-omarchy plugin enable omarchy-kbd-rgb
+# 1. Install VRGB (Arch / Omarchy)
+paru -S vrgb 2>/dev/null || {
+  git clone https://github.com/vrgb-dev/vrgb /tmp/vrgb
+  cd /tmp/vrgb && sudo ./install.sh
+}
+
+# 2. Reload udev rules & load kernel module
+sudo udevadm control --reload-rules && sudo udevadm trigger
+sudo modprobe asus-nb-wmi
+echo asus-nb-wmi | sudo tee /etc/modules-load.d/asus-nb-wmi.conf
 ```
 
-A keyboard icon will appear in your system tray. Restart the shell if needed: `omarchy restart shell`.
+---
 
-## Usage & IPC Commands
+## ⌨️ Shortcuts & CLI
 
-- **Left- or right-click the tray icon** to open the control panel.
-- Choose between **Theme**, **Static**, **Rainbow**, or **Off**.
-- Pick from the 12 curated color presets, or type a custom 6-digit hex color.
-- Drag the brightness slider or tap the quick-step buttons (`Off`, `33%`, `67%`, `100%`).
-- Clicking outside the panel (or pressing Escape) dismisses it.
-
-### Command-line & Hyprland Shortcuts
-
-You can control `omarchy-kbd-rgb` directly via IPC from scripts or Hyprland keybindings:
+Control `omarchy-kbd-rgb` from terminal scripts or Hyprland keybindings:
 
 ```bash
 omarchy-shell omarchy-kbd-rgb toggle              # Open / close control panel
-omarchy-shell omarchy-kbd-rgb togglePower         # Toggle between off and previous on mode
+omarchy-shell omarchy-kbd-rgb togglePower         # Toggle backlight on/off
 omarchy-shell omarchy-kbd-rgb stepBrightness 10   # Increase brightness by 10%
 omarchy-shell omarchy-kbd-rgb stepBrightness -10  # Decrease brightness by 10%
-omarchy-shell omarchy-kbd-rgb nextPreset          # Cycle to the next preset color
-omarchy-shell omarchy-kbd-rgb setMode theme       # Match current Omarchy theme accent
+omarchy-shell omarchy-kbd-rgb nextPreset          # Cycle to next color preset
+omarchy-shell omarchy-kbd-rgb setMode theme       # Match current Omarchy theme
 omarchy-shell omarchy-kbd-rgb setHex 00E5FF       # Set custom hex color
 omarchy-shell omarchy-kbd-rgb setBrightness 80    # Set brightness percentage
-omarchy-shell omarchy-kbd-rgb setBatterySaver true|false  # Toggle low-battery throttle
-omarchy-shell omarchy-kbd-rgb setNightLightSync true|false # Toggle night light warm shift
-omarchy-shell omarchy-kbd-rgb status              # Get current JSON status
+omarchy-shell omarchy-kbd-rgb status              # Output JSON status
 ```
 
-*(Note: `kbd-rgb` is also preserved as a backward-compatible alias target for all IPC commands).*
+---
 
-## License
+## 📖 Architecture & Deep Dive
 
-MIT
+For hardware protocol details (HID LampArray vs WMI), UPower DBus synchronization, and Cairo rendering internals, see [**How It Works (Architecture & Deep Dive)**](docs/HOW_IT_WORKS.md).
+
+---
+
+## 📄 License
+
+[MIT](LICENSE)
