@@ -230,6 +230,33 @@ Item {
     function setMode(modeStr: string): string { root.setMode(modeStr); return "ok" }
     function applyThemeAccent(): string { root.setMode("theme"); return "ok" }
     function setFollowTheme(enabled: bool): string { root.followTheme = enabled; if (enabled) root.applyThemeAccent(); return "ok" }
+    function stepBrightness(delta: int): string {
+      var next = Math.max(0, Math.min(100, root.brightness + delta))
+      root.setBrightness(next)
+      return String(root.brightness)
+    }
+    function togglePower(): string {
+      if (root.mode === "off") {
+        root.setMode(root.followTheme ? "theme" : "static")
+      } else {
+        root.setMode("off")
+      }
+      return root.mode
+    }
+    function nextPreset(): string {
+      root.followTheme = false
+      var presets = Model.PRESETS
+      var currentIndex = -1
+      for (var i = 0; i < presets.length; i++) {
+        if (presets[i].hex === root.hex) {
+          currentIndex = i
+          break
+        }
+      }
+      var nextIndex = (currentIndex + 1) % presets.length
+      root.setHex(presets[nextIndex].hex)
+      return presets[nextIndex].name + " (#" + presets[nextIndex].hex + ")"
+    }
     function status(): string {
       return JSON.stringify({
         hex: root.hex,

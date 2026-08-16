@@ -6,12 +6,13 @@ keyboard backlight on ASUS Vivobook laptops over the **HID LampArray** interface
 
 The plugin runs as a shell **service** that:
 
-- registers a **system tray icon** (freedesktop StatusNotifierItem) that shows
-  the current keyboard color as a small swatch;
-- opens a themed control panel on click — preset colors, hex input, brightness
-  slider, and Static / Rainbow / Off modes;
-- reapplies your color after a reboot or full power cycle, because the keyboard
-  resets to its firmware default when fully powered off.
+- registers a **vector system tray icon** (freedesktop StatusNotifierItem) that renders
+  a sharp, anti-aliased keyboard illuminated in your active color (or rainbow gradient in rainbow mode);
+- provides **two-way hardware brightness key synchronization** (via UPower DBus and sysfs);
+- provides a **Theme Accent mode** that automatically tracks your active Omarchy theme's accent color;
+- opens a modern control panel on click — 12-color curated palette with contrast indicators, custom hex input,
+  brightness slider with quick step buttons, and Theme / Static / Rainbow / Off modes;
+- reapplies your color after a reboot or full power cycle, surviving firmware power resets.
 
 The keyboard on these laptops does **not** speak the ASUS WMI dialect that
 `asusctl`/OpenRGB use for ROG and TUF laptops — it exposes the Microsoft HID
@@ -23,15 +24,14 @@ rather than the usual ASUS tools.
 ```
 omarchy-shell (service)
 ├── Service.qml   state + vrgb apply queue + control window (PanelWindow)
-└── sni.py        StatusNotifierItem → shows in omarchy.tray
+└── sni.py        StatusNotifierItem (Cairo vector tray icon) + UPower DBus hotkey sync
                         │ left/right click
                         ▼
         omarchy-shell kbd-rgb toggle
 ```
 
 The tray icon is a real StatusNotifierItem, so it appears inside the existing
-`omarchy.tray` widget and is pinnable/hidable like any other tray app. It
-updates to a solid color swatch of the current keyboard color.
+`omarchy.tray` widget and is pinnable/hidable like any other tray app.
 
 ## Prerequisites
 
@@ -46,7 +46,7 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 vrgb set ff0000 100   # sanity check: keyboard turns red
 ```
 
-The helper also needs `python3` with `dbus-python` (already installed on
+The helper also needs `python3` with `dbus-python` and `pycairo` (pre-installed on
 Omarchy). Some ITE5570 systems ignore HID commands until the ASUS WMI module
 has been loaded. If color changes do nothing:
 
@@ -66,8 +66,7 @@ omarchy-shell shell rescanPlugins
 ```
 
 Then enable it by adding its id to `plugins[]` in
-`~/.config/omarchy/shell.json` (third-party plugins are enabled iff their id
-appears there):
+`~/.config/omarchy/shell.json`:
 
 ```json
 {
@@ -86,30 +85,29 @@ omarchy-shell shell listPlugins | grep kbd-rgb
 A keyboard icon should appear in the system tray. Restart the shell if it does
 not: `omarchy restart shell`.
 
-## Usage
+## Usage & IPC Commands
 
 - **Left- or right-click the tray icon** to open the control panel.
-- Pick a preset swatch, type a hex color (Enter), or drag the brightness
-  slider. Choose Static, Rainbow, or Off.
-- Clicking anywhere outside the panel (or pressing Escape) closes it.
-- Every change is saved to the `kbd` profile and re-applied on shell startup by
-  the service, so the color survives reboots and full power cycles.
+- Choose between **Theme**, **Static**, **Rainbow**, or **Off**.
+- Pick from the 12 curated color presets, or type a custom 6-digit hex color.
+- Drag the brightness slider or tap the quick-step buttons (`Off`, `33%`, `67%`, `100%`).
+- Clicking outside the panel (or pressing Escape) dismisses it.
 
-The tray swatch recolors live as you change the color.
+### Command-line & Hyprland Shortcuts
 
-## Development
+You can control `kbd-rgb` directly via IPC from scripts or Hyprland keybindings:
 
 ```bash
-omarchy plugin validate .
-node --check Model.js
-python3 -m py_compile sni.py
-omarchy-shell kbd-rgb ping
-omarchy-shell kbd-rgb status
-omarchy-shell kbd-rgb setHex ff8800
+omarchy-shell kbd-rgb toggle              # Open / close control panel
+omarchy-shell kbd-rgb togglePower         # Toggle between off and previous on mode
+omarchy-shell kbd-rgb stepBrightness 10   # Increase brightness by 10%
+omarchy-shell kbd-rgb stepBrightness -10  # Decrease brightness by 10%
+omarchy-shell kbd-rgb nextPreset          # Cycle to the next preset color
+omarchy-shell kbd-rgb setMode theme       # Match current Omarchy theme accent
+omarchy-shell kbd-rgb setHex 00E5FF       # Set custom hex color
+omarchy-shell kbd-rgb setBrightness 80    # Set brightness percentage
+omarchy-shell kbd-rgb status              # Get current JSON status
 ```
-
-`Service.qml` reuses Omarchy's MIT-licensed shell kit (`PanelWindow`,
-`BorderSurface`, `Button`, `PanelSlider`, `qs.Commons`).
 
 ## License
 
