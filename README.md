@@ -1,4 +1,4 @@
-# kbd-rgb
+# omarchy-kbd-rgb
 
 An [Omarchy](https://omarchy.org/) Quattro shell plugin that controls the RGB
 keyboard backlight on ASUS Vivobook laptops over the **HID LampArray** interface
@@ -10,6 +10,7 @@ The plugin runs as a shell **service** that:
   a sharp, anti-aliased keyboard illuminated in your active color (or rainbow gradient in rainbow mode);
 - provides **two-way hardware brightness key synchronization** (via UPower DBus and sysfs);
 - provides a **Theme Accent mode** that automatically tracks your active Omarchy theme's accent color;
+- provides **Smart Automations**: Battery Saver (auto-caps brightness on low battery) and Night Light Warm Tint Sync (zero-blue warm amber);
 - opens a modern control panel on click — 12-color curated palette with contrast indicators, custom hex input,
   brightness slider with quick step buttons, and Theme / Static / Rainbow / Off modes;
 - reapplies your color after a reboot or full power cycle, surviving firmware power resets.
@@ -27,7 +28,7 @@ omarchy-shell (service)
 └── sni.py        StatusNotifierItem (Cairo vector tray icon) + UPower DBus hotkey sync
                         │ left/right click
                         ▼
-        omarchy-shell kbd-rgb toggle
+        omarchy-shell omarchy-kbd-rgb toggle
 ```
 
 The tray icon is a real StatusNotifierItem, so it appears inside the existing
@@ -60,8 +61,8 @@ echo asus-nb-wmi | sudo tee /etc/modules-load.d/asus-nb-wmi.conf
 From a checkout of this repo:
 
 ```bash
-mkdir -p ~/.config/omarchy/plugins/kbd-rgb
-cp manifest.json Service.qml Model.js sni.py ~/.config/omarchy/plugins/kbd-rgb/
+mkdir -p ~/.config/omarchy/plugins/omarchy-kbd-rgb
+cp manifest.json Service.qml Model.js sni.py ~/.config/omarchy/plugins/omarchy-kbd-rgb/
 omarchy-shell shell rescanPlugins
 ```
 
@@ -71,7 +72,7 @@ Then enable it by adding its id to `plugins[]` in
 ```json
 {
   "plugins": [
-    { "id": "kbd-rgb" }
+    { "id": "omarchy-kbd-rgb" }
   ]
 }
 ```
@@ -79,7 +80,7 @@ Then enable it by adding its id to `plugins[]` in
 The shell hot-reloads `shell.json` on save. Verify with:
 
 ```bash
-omarchy-shell shell listPlugins | grep kbd-rgb
+omarchy-shell shell listPlugins | grep omarchy-kbd-rgb
 ```
 
 A keyboard icon should appear in the system tray. Restart the shell if it does
@@ -95,19 +96,23 @@ not: `omarchy restart shell`.
 
 ### Command-line & Hyprland Shortcuts
 
-You can control `kbd-rgb` directly via IPC from scripts or Hyprland keybindings:
+You can control `omarchy-kbd-rgb` directly via IPC from scripts or Hyprland keybindings:
 
 ```bash
-omarchy-shell kbd-rgb toggle              # Open / close control panel
-omarchy-shell kbd-rgb togglePower         # Toggle between off and previous on mode
-omarchy-shell kbd-rgb stepBrightness 10   # Increase brightness by 10%
-omarchy-shell kbd-rgb stepBrightness -10  # Decrease brightness by 10%
-omarchy-shell kbd-rgb nextPreset          # Cycle to the next preset color
-omarchy-shell kbd-rgb setMode theme       # Match current Omarchy theme accent
-omarchy-shell kbd-rgb setHex 00E5FF       # Set custom hex color
-omarchy-shell kbd-rgb setBrightness 80    # Set brightness percentage
-omarchy-shell kbd-rgb status              # Get current JSON status
+omarchy-shell omarchy-kbd-rgb toggle              # Open / close control panel
+omarchy-shell omarchy-kbd-rgb togglePower         # Toggle between off and previous on mode
+omarchy-shell omarchy-kbd-rgb stepBrightness 10   # Increase brightness by 10%
+omarchy-shell omarchy-kbd-rgb stepBrightness -10  # Decrease brightness by 10%
+omarchy-shell omarchy-kbd-rgb nextPreset          # Cycle to the next preset color
+omarchy-shell omarchy-kbd-rgb setMode theme       # Match current Omarchy theme accent
+omarchy-shell omarchy-kbd-rgb setHex 00E5FF       # Set custom hex color
+omarchy-shell omarchy-kbd-rgb setBrightness 80    # Set brightness percentage
+omarchy-shell omarchy-kbd-rgb setBatterySaver true|false  # Toggle low-battery throttle
+omarchy-shell omarchy-kbd-rgb setNightLightSync true|false # Toggle night light warm shift
+omarchy-shell omarchy-kbd-rgb status              # Get current JSON status
 ```
+
+*(Note: `kbd-rgb` is also preserved as a backward-compatible alias target for all IPC commands).*
 
 ## License
 

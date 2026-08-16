@@ -37,7 +37,7 @@ import dbus.service
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
 
-ID = "kbd-rgb"
+ID = "omarchy-kbd-rgb"
 BUS_NAME = "org.kde.StatusNotifierItem-{}-{}".format(os.getpid(), 1)
 OBJ_PATH = "/StatusNotifierItem"
 IFACE = "org.kde.StatusNotifierItem"
@@ -56,7 +56,7 @@ PIXMAP_SIZE = 22
 def open_panel():
     try:
         subprocess.Popen(
-            ["omarchy-shell", "kbd-rgb", "toggle"],
+            ["omarchy-shell", "omarchy-kbd-rgb", "toggle"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -322,7 +322,7 @@ class Sni(dbus.service.Object):
             "IconName": dbus.String(self.icon_name),
             "IconPixmap": self.icon_pixmap,
             "ToolTip": dbus.Struct(
-                ("kbd-rgb",
+                ("omarchy-kbd-rgb",
                  dbus.Array([], signature="(iiay)"),
                  "Keyboard RGB",
                  self.tooltip_subtitle),

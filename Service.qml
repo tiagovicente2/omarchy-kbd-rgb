@@ -40,7 +40,7 @@ Item {
     var dir = root.manifest && root.manifest.__sourceDir
       ? String(root.manifest.__sourceDir) : ""
     if (dir) return dir
-    return Quickshell.env("HOME") + "/.config/omarchy/plugins/kbd-rgb"
+    return Quickshell.env("HOME") + "/.config/omarchy/plugins/omarchy-kbd-rgb"
   }
   readonly property color foreground: Color.popups.text
   readonly property string fontFamily: Style.font.family
@@ -265,6 +265,62 @@ Item {
 
   // -------------------------------------------------------------- IPC
 
+  IpcHandler {
+    target: "omarchy-kbd-rgb"
+
+    function ping(): string { return "ok" }
+    function toggle(): string { root.toggle(); return "ok" }
+    function open(): string { root.open(); return "ok" }
+    function close(): string { root.close(); return "ok" }
+    function setHex(hexStr: string): string { root.setHex(hexStr); return "ok" }
+    function setBrightness(value: int): string { root.setBrightness(value); return "ok" }
+    function setMode(modeStr: string): string { root.setMode(modeStr); return "ok" }
+    function applyThemeAccent(): string { root.setMode("theme"); return "ok" }
+    function setFollowTheme(enabled: bool): string { root.followTheme = enabled; if (enabled) root.applyThemeAccent(); return "ok" }
+    function setBatterySaver(enabled: bool): string { root.batterySaver = enabled; return "ok" }
+    function setNightLightSync(enabled: bool): string { root.nightLightSync = enabled; return "ok" }
+    function stepBrightness(delta: int): string {
+      var next = Math.max(0, Math.min(100, root.brightness + delta))
+      root.setBrightness(next)
+      return String(root.brightness)
+    }
+    function togglePower(): string {
+      if (root.mode === "off") {
+        root.setMode(root.followTheme ? "theme" : "static")
+      } else {
+        root.setMode("off")
+      }
+      return root.mode
+    }
+    function nextPreset(): string {
+      root.followTheme = false
+      var presets = Model.PRESETS
+      var currentIndex = -1
+      for (var i = 0; i < presets.length; i++) {
+        if (presets[i].hex === root.hex) {
+          currentIndex = i
+          break
+        }
+      }
+      var nextIndex = (currentIndex + 1) % presets.length
+      root.setHex(presets[nextIndex].hex)
+      return presets[nextIndex].name + " (#" + presets[nextIndex].hex + ")"
+    }
+    function status(): string {
+      return JSON.stringify({
+        hex: root.hex,
+        brightness: root.brightness,
+        mode: root.mode,
+        followTheme: root.followTheme,
+        batterySaver: root.batterySaver,
+        nightLightSync: root.nightLightSync,
+        opened: root.opened,
+        vrgb: root.vrgbAvailable
+      })
+    }
+  }
+
+  // Backward compatibility alias for kbd-rgb target
   IpcHandler {
     target: "kbd-rgb"
 
