@@ -104,6 +104,27 @@ function parseStatus(raw) {
   return state
 }
 
+function hsvToHex(h, s, v) {
+  h = ((h % 360) + 360) % 360
+  var c = v * s
+  var x = c * (1 - Math.abs(((h / 60) % 2) - 1))
+  var m = v - c
+  var r = 0, g = 0, b = 0
+  if (h < 60) { r = c; g = x; b = 0 }
+  else if (h < 120) { r = x; g = c; b = 0 }
+  else if (h < 180) { r = 0; g = c; b = x }
+  else if (h < 240) { r = 0; g = x; b = c }
+  else if (h < 300) { r = x; g = 0; b = c }
+  else { r = c; g = 0; b = x }
+  var rHex = Math.round((r + m) * 255).toString(16)
+  var gHex = Math.round((g + m) * 255).toString(16)
+  var bHex = Math.round((b + m) * 255).toString(16)
+  if (rHex.length < 2) rHex = "0" + rHex
+  if (gHex.length < 2) gHex = "0" + gHex
+  if (bHex.length < 2) bHex = "0" + bHex
+  return (rHex + gHex + bHex).toUpperCase()
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     PRESETS: PRESETS,
@@ -116,6 +137,7 @@ if (typeof module !== "undefined") {
     isLightColor: isLightColor,
     brightnessIcon: brightnessIcon,
     modeIcon: modeIcon,
-    parseStatus: parseStatus
+    parseStatus: parseStatus,
+    hsvToHex: hsvToHex
   }
 }

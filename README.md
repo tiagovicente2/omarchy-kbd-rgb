@@ -7,12 +7,13 @@ RGB keyboard backlight control service and control panel for **ASUS Vivobook** l
 ## ✨ Features
 
 - **🎨 Modern Control Panel**: 12 curated presets with dynamic contrast checkmarks, custom hex input with validation, and smooth brightness controls.
-- **󰏘 Theme Accent Mode**: Automatically matches and tracks your active Omarchy theme accent color in real time.
+- **󰏘 Theme Mode (Accent vs Bar Text)**: Automatically tracks your active Omarchy theme in real time, with an instant toggle between Theme Accent (`#7D82D9`) and Bar Text / Icon color (`#FFCEAD`).
+- **🌈 Smooth Rainbow Spectrum Cycle**: Animated RGB color cycling that smoothly transitions your keyboard backlight through the full color spectrum.
 - **⌨️ Vector Tray Icon**: Dynamic 22×22 StatusNotifierItem keyboard icon rendered in Cairo, illuminated with your active color, dynamic rainbow wave, or off state.
 - **⚡ Hardware Hotkey Sync**: Full bidirectional sync with laptop Fn brightness hotkeys (<kbd>Fn</kbd>+<kbd>F7</kbd> / <kbd>Fn</kbd>+<kbd>F4</kbd>) via UPower DBus.
-- **🔋 Battery Saver**: Automatically caps keyboard backlight to 33% when battery level is low ($\le 25\%$) and restores on AC power.
-- **🌙 Night Light Warm Tint**: Automatically transitions to zero-blue warm amber (`#FF7700`) during Night Light to reduce eye strain.
-- **💾 Boot Persistence**: Automatically reapplies your color and brightness after reboot or firmware power resets.
+- **🔋 Battery Saver**: Turns off keyboard backlight after 15s of idle to save power, and caps brightness to 33% when battery level is low ($\le 25\%$).
+- **🌙 Night Light Warm Tint**: Automatically transitions to zero-blue warm amber (`#FF7700`) during Night Light to reduce eye strain, reacting in real time to toggle events.
+- **💾 Boot & Theme Persistence**: Automatically persists your color, theme target, and brightness preferences across reboots and shell reloads.
 
 ---
 
@@ -52,15 +53,18 @@ echo asus-nb-wmi | sudo tee /etc/modules-load.d/asus-nb-wmi.conf
 Control `omarchy-kbd-rgb` from terminal scripts or Hyprland keybindings:
 
 ```bash
-omarchy-shell omarchy-kbd-rgb toggle              # Open / close control panel
-omarchy-shell omarchy-kbd-rgb togglePower         # Toggle backlight on/off
-omarchy-shell omarchy-kbd-rgb stepBrightness 10   # Increase brightness by 10%
-omarchy-shell omarchy-kbd-rgb stepBrightness -10  # Decrease brightness by 10%
-omarchy-shell omarchy-kbd-rgb nextPreset          # Cycle to next color preset
-omarchy-shell omarchy-kbd-rgb setMode theme       # Match current Omarchy theme
-omarchy-shell omarchy-kbd-rgb setHex 00E5FF       # Set custom hex color
-omarchy-shell omarchy-kbd-rgb setBrightness 80    # Set brightness percentage
-omarchy-shell omarchy-kbd-rgb status              # Output JSON status
+omarchy-shell omarchy-kbd-rgb toggle                   # Open / close control panel
+omarchy-shell omarchy-kbd-rgb togglePower              # Toggle backlight on/off
+omarchy-shell omarchy-kbd-rgb stepBrightness 10        # Increase brightness by 10%
+omarchy-shell omarchy-kbd-rgb stepBrightness -10       # Decrease brightness by 10%
+omarchy-shell omarchy-kbd-rgb nextPreset               # Cycle to next color preset
+omarchy-shell omarchy-kbd-rgb setMode theme            # Switch to theme tracking mode
+omarchy-shell omarchy-kbd-rgb setThemeTarget accent    # Track Theme Accent color
+omarchy-shell omarchy-kbd-rgb setThemeTarget foreground# Track Theme Bar Text color
+omarchy-shell omarchy-kbd-rgb setMode rainbow          # Start animated rainbow spectrum cycle
+omarchy-shell omarchy-kbd-rgb setHex 00E5FF            # Set custom hex color
+omarchy-shell omarchy-kbd-rgb setBrightness 80         # Set brightness percentage
+omarchy-shell omarchy-kbd-rgb status                   # Output JSON status
 ```
 
 ---

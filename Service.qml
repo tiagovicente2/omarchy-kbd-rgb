@@ -23,10 +23,13 @@ Item {
   property int brightness: 100
   property string mode: "static"
   property bool followTheme: false
+  property string themeTarget: "accent" // "accent" | "foreground"
+  property int rainbowHue: 0
   property bool batterySaver: false
   property bool nightLightSync: false
   property string savedPreNightLightHex: ""
   property int savedPreBatterySaverBrightness: -1
+  property bool isBatterySaverIdled: false
   property bool opened: false
   property bool persistOnIdle: false
   property var queue: []
@@ -35,6 +38,8 @@ Item {
 
   readonly property var nightlightService: shell ? shell.firstPartyServiceFor("omarchy.nightlight") : null
   readonly property bool isNightlightActive: !!(nightlightService && nightlightService.enabled)
+  readonly property bool isNightLightEffective: root.nightLightSync && root.isNightlightActive && root.mode !== "off"
+  readonly property string activeDisplayHex: root.isNightLightEffective ? root.nightLightHex : root.hex
 
   readonly property string pluginDir: {
     var dir = root.manifest && root.manifest.__sourceDir
@@ -47,15 +52,17 @@ Item {
 
   readonly property string tooltip: {
     if (root.mode === "off") return "Keyboard: Off"
-    if (root.mode === "rainbow") return "Keyboard: Rainbow"
-    var suffix = root.followTheme ? " (Theme Accent)" : ""
+    if (root.isNightLightEffective) return "Keyboard: #" + root.nightLightHex + " (" + root.brightness + "%) (Night Light)"
+    if (root.mode === "rainbow") return "Keyboard: Rainbow (" + root.brightness + "%)"
+    var suffix = root.followTheme ? (root.themeTarget === "foreground" ? " (Theme Text)" : " (Theme Accent)") : ""
     return "Keyboard: #" + root.hex.toUpperCase() + " (" + root.brightness + "%)" + suffix
   }
 
   readonly property string modeLabel: {
     if (root.mode === "off") return "Off"
+    if (root.isNightLightEffective) return "Night Light"
     if (root.mode === "rainbow") return "Rainbow"
-    if (root.followTheme) return "Theme"
+    if (root.followTheme) return root.themeTarget === "foreground" ? "Theme (Text)" : "Theme (Accent)"
     return "Static"
   }
 
@@ -64,18 +71,39 @@ Item {
   Connections {
     target: Color
     function onAccentChanged() {
-      if (root.followTheme && root.mode === "static") {
+      if (root.followTheme && root.themeTarget === "accent" && root.mode !== "off" && root.mode !== "rainbow") {
+        root.applyThemeAccent()
+      }
+    }
+    function onForegroundChanged() {
+      if (root.followTheme && root.themeTarget === "foreground" && root.mode !== "off" && root.mode !== "rainbow") {
         root.applyThemeAccent()
       }
     }
   }
 
+  function currentThemeColor() {
+    return root.themeTarget === "foreground" ? Color.foreground : Color.accent
+  }
+
   function applyThemeAccent() {
-    var accentHex = Model.qcolorToHex(Color.accent)
+    var targetCol = root.currentThemeColor()
+    var accentHex = Model.qcolorToHex(targetCol)
     if (accentHex && Model.validHex(accentHex)) {
       root.hex = accentHex
       if (root.mode === "off" || root.mode === "rainbow") root.mode = "static"
       apply()
+      scheduleSettingsSave()
+    }
+  }
+
+  function setThemeTarget(target) {
+    if (target !== "accent" && target !== "foreground") return
+    root.themeTarget = target
+    if (root.followTheme && root.mode !== "off" && root.mode !== "rainbow") {
+      root.applyThemeAccent()
+    } else {
+      scheduleSettingsSave()
     }
   }
 
@@ -84,37 +112,75 @@ Item {
   // Night Light warm tint synchronization (uses pure warm amber FF7700 with zero blue light)
   readonly property string nightLightHex: "FF7700"
 
-  onIsNightlightActiveChanged: {
-    if (!root.nightLightSync) return
-    if (root.isNightlightActive && root.mode === "static") {
+  onIsNightLightEffectiveChanged: {
+    if (!root.settingsLoaded || root.hydrating) return
+    if (root.isNightLightEffective) {
       if (root.savedPreNightLightHex === "") {
         root.savedPreNightLightHex = root.hex
       }
-      root.setHex(root.nightLightHex)
-    } else if (!root.isNightlightActive && root.savedPreNightLightHex !== "") {
-      root.setHex(root.savedPreNightLightHex)
+      apply()
+    } else {
       root.savedPreNightLightHex = ""
+      if (root.followTheme && root.mode !== "off" && root.mode !== "rainbow") {
+        root.applyThemeAccent()
+      } else {
+        apply()
+      }
     }
   }
 
-  // Battery Saver (cap brightness on low battery)
+  // Battery Saver (cap brightness on low battery & 15s idle timeout)
   readonly property bool isLowBattery: {
     var dev = UPower.displayDevice
     return !!(UPower.onBattery && dev && dev.isPresent && dev.percentage <= 25)
   }
 
-  onIsLowBatteryChanged: {
-    if (!root.batterySaver) return
-    if (root.isLowBattery && root.mode !== "off") {
+  function updateBatterySaverBrightness() {
+    if (!root.settingsLoaded || root.hydrating) return
+    if (root.batterySaver && root.isLowBattery && root.mode !== "off") {
       if (root.savedPreBatterySaverBrightness < 0) {
         root.savedPreBatterySaverBrightness = root.brightness
       }
       if (root.brightness > 33) {
         root.setBrightness(33)
       }
-    } else if (!root.isLowBattery && root.savedPreBatterySaverBrightness >= 0) {
+    } else if ((!root.batterySaver || !root.isLowBattery) && root.savedPreBatterySaverBrightness >= 0) {
       root.setBrightness(root.savedPreBatterySaverBrightness)
       root.savedPreBatterySaverBrightness = -1
+    }
+  }
+
+  onIsLowBatteryChanged: updateBatterySaverBrightness()
+
+  IdleMonitor {
+    id: batterySaverIdleMonitor
+    enabled: root.batterySaver && root.mode !== "off"
+    timeout: 15
+    respectInhibitors: true
+    onIsIdleChanged: root.handleBatterySaverIdleChanged()
+  }
+
+  function handleBatterySaverIdleChanged() {
+    if (!root.batterySaver || root.mode === "off") {
+      if (root.isBatterySaverIdled) {
+        root.isBatterySaverIdled = false
+        apply()
+      }
+      return
+    }
+
+    if (batterySaverIdleMonitor.isIdle) {
+      root.isBatterySaverIdled = true
+      enqueue(["vrgb", "off"])
+    } else {
+      if (root.isBatterySaverIdled) {
+        root.isBatterySaverIdled = false
+        if (root.followTheme && root.mode !== "off" && root.mode !== "rainbow") {
+          root.applyThemeAccent()
+        } else {
+          apply()
+        }
+      }
     }
   }
 
@@ -136,12 +202,38 @@ Item {
     applyProc.running = true
   }
 
+  // Active smooth spectrum color cycle timer for single-zone rainbow mode
+  Timer {
+    id: rainbowTimer
+    interval: 80
+    repeat: true
+    running: root.mode === "rainbow" && !root.isBatterySaverIdled && !root.isNightLightEffective
+    onTriggered: {
+      root.rainbowHue = (root.rainbowHue + 3) % 360
+      var currentHex = Model.hsvToHex(root.rainbowHue, 1.0, 1.0)
+      root.hex = currentHex
+      root.enqueue(["vrgb", "set", currentHex, String(root.brightness)])
+      root.feedSni()
+    }
+  }
+
   function apply() {
+    if (root.isBatterySaverIdled) {
+      root.persistOnIdle = true
+      syncHwBrightnessToHelper()
+      scheduleSettingsSave()
+      return
+    }
+
     var cmd
     if (root.mode === "off") {
       cmd = ["vrgb", "off"]
+    } else if (root.isNightLightEffective) {
+      cmd = ["vrgb", "set", root.nightLightHex, String(root.brightness)]
     } else if (root.mode === "rainbow") {
-      cmd = ["vrgb", "auto", "on"]
+      var rainbowHex = Model.hsvToHex(root.rainbowHue, 1.0, 1.0)
+      root.hex = rainbowHex
+      cmd = ["vrgb", "set", rainbowHex, String(root.brightness)]
     } else {
       cmd = ["vrgb", "set", root.hex, String(root.brightness)]
     }
@@ -150,30 +242,40 @@ Item {
     enqueue(cmd)
     feedSni()
     syncHwBrightnessToHelper()
+    scheduleSettingsSave()
   }
 
   function setHex(next) {
     if (!Model.validHex(next)) return
+    root.isBatterySaverIdled = false
     var normalized = Model.normalizeHex(next)
     root.hex = normalized
-    if (normalized !== Model.qcolorToHex(Color.accent)) {
-      root.followTheme = false
+    if (root.savedPreNightLightHex !== "") {
+      root.savedPreNightLightHex = normalized
     }
+    root.followTheme = false
     if (root.mode === "off" || root.mode === "rainbow") root.mode = "static"
     apply()
   }
 
   function setBrightness(value) {
-    root.brightness = Math.max(0, Math.min(100, Math.round(value)))
-    if (root.brightness === 0) {
+    var val = Math.max(0, Math.min(100, Math.round(value)))
+    root.isBatterySaverIdled = false
+    root.brightness = val
+    if (val === 0) {
       root.mode = "off"
     } else if (root.mode === "off") {
       root.mode = "static"
+      if (root.followTheme) {
+        root.applyThemeAccent()
+        return
+      }
     }
     apply()
   }
 
   function setMode(next) {
+    root.isBatterySaverIdled = false
     if (next === "theme") {
       root.followTheme = true
       root.mode = "static"
@@ -182,7 +284,7 @@ Item {
     }
     root.followTheme = false
     root.mode = next
-    if (next === "static" && root.brightness === 0) {
+    if ((next === "static" || next === "rainbow") && root.brightness === 0) {
       root.brightness = 100
     }
     apply()
@@ -192,7 +294,16 @@ Item {
 
   function feedSni() {
     if (!sniProc.running) return
-    sniProc.write("mode " + root.mode + " " + root.hex + "\n")
+    if (root.isNightLightEffective) {
+      sniProc.write("mode static " + root.nightLightHex + "\n")
+      sniProc.write("tooltip " + root.tooltip + "\n")
+      return
+    }
+    var sniMode = root.mode
+    if (root.followTheme && root.mode !== "off" && root.mode !== "rainbow") {
+      sniMode = "theme"
+    }
+    sniProc.write("mode " + sniMode + " " + root.hex + "\n")
     sniProc.write("tooltip " + root.tooltip + "\n")
   }
 
@@ -223,12 +334,20 @@ Item {
       }
     } else {
       var modeChanged = root.mode === "off"
-      if (modeChanged) root.mode = "static"
+      if (modeChanged) {
+        root.mode = "static"
+        if (root.followTheme) {
+          root.brightness = pct
+          root.applyThemeAccent()
+          return
+        }
+      }
       root.brightness = pct
       enqueue(["vrgb", "brightness", String(pct)])
       feedSni()
     }
     root.persistOnIdle = true
+    scheduleSettingsSave()
   }
 
   // ------------------------------------------------------- window control
@@ -253,9 +372,11 @@ Item {
 
   function onStatus(raw) {
     var state = Model.parseStatus(raw)
-    if (state.hex) root.hex = state.hex
-    if (state.brightness >= 0) root.brightness = state.brightness
-    if (state.mode) root.mode = state.mode
+    if (!root.settingsLoaded) {
+      if (state.hex) root.hex = state.hex
+      if (state.brightness >= 0) root.brightness = state.brightness
+      if (state.mode) root.mode = state.mode
+    }
     feedSni()
   }
 
@@ -276,9 +397,10 @@ Item {
     function setBrightness(value: int): string { root.setBrightness(value); return "ok" }
     function setMode(modeStr: string): string { root.setMode(modeStr); return "ok" }
     function applyThemeAccent(): string { root.setMode("theme"); return "ok" }
+    function setThemeTarget(target: string): string { root.setThemeTarget(target); return "ok" }
     function setFollowTheme(enabled: bool): string { root.followTheme = enabled; if (enabled) root.applyThemeAccent(); return "ok" }
-    function setBatterySaver(enabled: bool): string { root.batterySaver = enabled; return "ok" }
-    function setNightLightSync(enabled: bool): string { root.nightLightSync = enabled; return "ok" }
+    function setBatterySaver(enabled: bool): string { root.batterySaver = enabled; root.scheduleSettingsSave(); return "ok" }
+    function setNightLightSync(enabled: bool): string { root.nightLightSync = enabled; root.scheduleSettingsSave(); return "ok" }
     function stepBrightness(delta: int): string {
       var next = Math.max(0, Math.min(100, root.brightness + delta))
       root.setBrightness(next)
@@ -310,10 +432,13 @@ Item {
       return JSON.stringify({
         hex: root.hex,
         brightness: root.brightness,
-        mode: root.mode,
+        mode: root.followTheme ? "theme" : root.mode,
         followTheme: root.followTheme,
+        themeTarget: root.themeTarget,
         batterySaver: root.batterySaver,
+        batterySaverIdled: root.isBatterySaverIdled,
         nightLightSync: root.nightLightSync,
+        nightLightActive: root.isNightLightEffective,
         opened: root.opened,
         vrgb: root.vrgbAvailable
       })
@@ -332,9 +457,10 @@ Item {
     function setBrightness(value: int): string { root.setBrightness(value); return "ok" }
     function setMode(modeStr: string): string { root.setMode(modeStr); return "ok" }
     function applyThemeAccent(): string { root.setMode("theme"); return "ok" }
+    function setThemeTarget(target: string): string { root.setThemeTarget(target); return "ok" }
     function setFollowTheme(enabled: bool): string { root.followTheme = enabled; if (enabled) root.applyThemeAccent(); return "ok" }
-    function setBatterySaver(enabled: bool): string { root.batterySaver = enabled; return "ok" }
-    function setNightLightSync(enabled: bool): string { root.nightLightSync = enabled; return "ok" }
+    function setBatterySaver(enabled: bool): string { root.batterySaver = enabled; root.scheduleSettingsSave(); return "ok" }
+    function setNightLightSync(enabled: bool): string { root.nightLightSync = enabled; root.scheduleSettingsSave(); return "ok" }
     function stepBrightness(delta: int): string {
       var next = Math.max(0, Math.min(100, root.brightness + delta))
       root.setBrightness(next)
@@ -366,13 +492,154 @@ Item {
       return JSON.stringify({
         hex: root.hex,
         brightness: root.brightness,
-        mode: root.mode,
+        mode: root.followTheme ? "theme" : root.mode,
         followTheme: root.followTheme,
+        themeTarget: root.themeTarget,
         batterySaver: root.batterySaver,
+        batterySaverIdled: root.isBatterySaverIdled,
         nightLightSync: root.nightLightSync,
+        nightLightActive: root.isNightLightEffective,
         opened: root.opened,
         vrgb: root.vrgbAvailable
       })
+    }
+  }
+
+  // ------------------------------------------------ settings persistence
+
+  readonly property string settingsPath: Quickshell.env("HOME") + "/.config/omarchy/kbd-rgb.json"
+
+  FileView {
+    id: settingsFile
+    path: root.settingsPath
+    watchChanges: false
+    atomicWrites: true
+    printErrors: false
+    onLoaded: root.loadSettings(text())
+    onLoadFailed: root.loadSettings("")
+  }
+
+  Timer {
+    id: settingsSaveTimer
+    interval: 300
+    repeat: false
+    onTriggered: root.flushSettings()
+  }
+
+  property bool settingsLoaded: false
+  property bool hydrating: false
+
+  onModeChanged: scheduleSettingsSave()
+  onHexChanged: {
+    if (root.mode !== "rainbow") scheduleSettingsSave()
+  }
+  onBrightnessChanged: scheduleSettingsSave()
+  onFollowThemeChanged: scheduleSettingsSave()
+  onThemeTargetChanged: scheduleSettingsSave()
+  onBatterySaverChanged: {
+    scheduleSettingsSave()
+    updateBatterySaverBrightness()
+    if (!root.batterySaver && root.isBatterySaverIdled) {
+      root.isBatterySaverIdled = false
+      if (root.followTheme && root.mode !== "off" && root.mode !== "rainbow") {
+        root.applyThemeAccent()
+      } else {
+        root.apply()
+      }
+    }
+  }
+  onNightLightSyncChanged: scheduleSettingsSave()
+
+  Timer {
+    id: startupFallbackTimer
+    interval: 1200
+    repeat: false
+    running: !root.settingsLoaded
+    onTriggered: {
+      if (!root.settingsLoaded) {
+        root.loadSettings("")
+      }
+    }
+  }
+
+  function scheduleSettingsSave() {
+    if (!root.settingsLoaded || root.hydrating) return
+    settingsSaveTimer.restart()
+  }
+
+  function loadSettings(raw) {
+    if (root.settingsLoaded) return
+    root.hydrating = true
+    var hasSettings = false
+    if (raw && raw.trim() !== "") {
+      try {
+        var data = JSON.parse(raw)
+        hasSettings = true
+        if (typeof data.themeTarget === "string" && (data.themeTarget === "accent" || data.themeTarget === "foreground")) {
+          root.themeTarget = data.themeTarget
+        }
+        if (typeof data.followTheme === "boolean") {
+          root.followTheme = data.followTheme
+        }
+        if (typeof data.batterySaver === "boolean") {
+          root.batterySaver = data.batterySaver
+        }
+        if (typeof data.nightLightSync === "boolean") {
+          root.nightLightSync = data.nightLightSync
+        }
+        if (typeof data.brightness === "number" && data.brightness >= 0 && data.brightness <= 100) {
+          root.brightness = data.brightness
+        }
+        if (typeof data.hex === "string" && Model.validHex(data.hex)) {
+          root.hex = Model.normalizeHex(data.hex)
+        }
+        if (typeof data.mode === "string") {
+          if (data.mode === "theme") {
+            root.followTheme = true
+            root.mode = "static"
+          } else if (data.mode === "rainbow" || data.mode === "off" || data.mode === "static") {
+            root.mode = data.mode
+          }
+        }
+      } catch (e) {
+        console.warn("kbd-rgb: failed to parse settings:", e)
+      }
+    }
+    root.hydrating = false
+    root.settingsLoaded = true
+
+    if (hasSettings) {
+      updateBatterySaverBrightness()
+      if (root.isNightLightEffective) {
+        if (root.savedPreNightLightHex === "") {
+          root.savedPreNightLightHex = root.hex
+        }
+        root.apply()
+      } else if (root.followTheme) {
+        root.applyThemeAccent()
+      } else {
+        root.apply()
+      }
+    } else {
+      root.restore()
+    }
+  }
+
+  function flushSettings() {
+    if (!root.settingsLoaded || root.hydrating) return
+    try {
+      var payload = {
+        mode: root.followTheme ? "theme" : root.mode,
+        hex: root.hex,
+        brightness: root.brightness,
+        followTheme: root.followTheme,
+        themeTarget: root.themeTarget,
+        batterySaver: root.batterySaver,
+        nightLightSync: root.nightLightSync
+      }
+      settingsFile.setText(JSON.stringify(payload, null, 2) + "\n")
+    } catch (e) {
+      console.warn("kbd-rgb: failed to flush settings:", e)
     }
   }
 
@@ -441,7 +708,6 @@ Item {
 
   Component.onCompleted: {
     sniProc.running = true
-    restore()
   }
 
   // --------------------------------------------------------- control window
@@ -505,28 +771,34 @@ Item {
             radius: Style.space(10)
             color: root.mode === "off"
               ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.06)
-              : (root.mode === "rainbow"
-                  ? Util.alpha(Color.accent, 0.15)
-                  : Util.alpha(Model.colorValue(root.hex), 0.18))
+              : (root.isNightLightEffective
+                  ? Util.alpha(Model.colorValue(root.nightLightHex), 0.18)
+                  : (root.mode === "rainbow"
+                      ? Util.alpha(Color.accent, 0.15)
+                      : Util.alpha(Model.colorValue(root.hex), 0.18)))
             border.width: 1
             border.color: root.mode === "off"
               ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.15)
-              : (root.mode === "rainbow"
-                  ? Color.accent
-                  : Model.colorValue(root.hex))
+              : (root.isNightLightEffective
+                  ? Model.colorValue(root.nightLightHex)
+                  : (root.mode === "rainbow"
+                      ? Color.accent
+                      : Model.colorValue(root.hex)))
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
 
             Text {
               anchors.centerIn: parent
-              text: Model.modeIcon(root.mode, root.followTheme)
+              text: root.isNightLightEffective ? "󰖔" : Model.modeIcon(root.mode, root.followTheme)
               font.family: root.fontFamily
               font.pixelSize: Style.font.icon
               color: root.mode === "off"
                 ? Qt.darker(root.foreground, 1.8)
-                : (root.mode === "rainbow"
-                    ? Color.accent
-                    : Model.colorValue(root.hex))
+                : (root.isNightLightEffective
+                    ? Model.colorValue(root.nightLightHex)
+                    : (root.mode === "rainbow"
+                        ? Color.accent
+                        : Model.colorValue(root.hex)))
             }
           }
 
@@ -550,8 +822,11 @@ Item {
             Text {
               text: {
                 if (root.mode === "off") return "DISABLED · OFF"
-                if (root.mode === "rainbow") return "DYNAMIC · RAINBOW"
-                var tag = root.followTheme ? "THEME ACCENT" : Model.colorName(root.hex).toUpperCase()
+                if (root.isNightLightEffective) return "NIGHT LIGHT · #" + root.nightLightHex + " · " + root.brightness + "%"
+                if (root.mode === "rainbow") return "DYNAMIC · RAINBOW · " + root.brightness + "%"
+                var tag = root.followTheme
+                  ? (root.themeTarget === "foreground" ? "THEME TEXT" : "THEME ACCENT")
+                  : Model.colorName(root.hex).toUpperCase()
                 return tag + " · " + root.brightness + "%"
               }
               color: Qt.darker(root.foreground, 1.4)
@@ -592,8 +867,8 @@ Item {
             horizontalPadding: Style.space(4)
             verticalPadding: Style.space(6)
             bordered: true
-            selected: root.followTheme && root.mode === "static"
-            active: root.followTheme && root.mode === "static"
+            selected: root.followTheme && root.mode !== "off" && root.mode !== "rainbow"
+            active: root.followTheme && root.mode !== "off" && root.mode !== "rainbow"
             onClicked: root.setMode("theme")
           }
 
@@ -643,6 +918,56 @@ Item {
           }
         }
 
+        // ==================== Theme Target Selector (when Theme mode active) ====================
+        Column {
+          visible: root.followTheme && root.mode !== "off" && root.mode !== "rainbow"
+          width: parent.width
+          spacing: Style.space(6)
+
+          PanelSectionHeader {
+            text: "THEME COLOR TARGET"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+          }
+
+          Row {
+            width: parent.width
+            spacing: Style.space(6)
+
+            readonly property real targetBtnWidth: (width - spacing) / 2
+
+            Button {
+              width: parent.targetBtnWidth
+              text: "Accent (#" + Model.qcolorToHex(Color.accent) + ")"
+              iconText: "󰏘"
+              fontSize: Style.font.caption
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              horizontalPadding: Style.space(4)
+              verticalPadding: Style.space(6)
+              bordered: true
+              selected: root.themeTarget === "accent"
+              active: root.themeTarget === "accent"
+              onClicked: root.setThemeTarget("accent")
+            }
+
+            Button {
+              width: parent.targetBtnWidth
+              text: "Bar Text (#" + Model.qcolorToHex(Color.foreground) + ")"
+              iconText: "󰌌"
+              fontSize: Style.font.caption
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              horizontalPadding: Style.space(4)
+              verticalPadding: Style.space(6)
+              bordered: true
+              selected: root.themeTarget === "foreground"
+              active: root.themeTarget === "foreground"
+              onClicked: root.setThemeTarget("foreground")
+            }
+          }
+        }
+
         PanelSeparator {
           foreground: root.foreground
         }
@@ -666,7 +991,7 @@ Item {
             }
 
             Text {
-              text: Model.hexLabel(root.hex)
+              text: Model.hexLabel(root.activeDisplayHex)
               color: Qt.darker(root.foreground, 1.4)
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -692,7 +1017,7 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: Style.space(38)
 
-                readonly property bool isSelected: root.mode === "static" && root.hex === modelData.hex && !root.followTheme
+                readonly property bool isSelected: !root.followTheme && (root.mode === "static" || root.isNightLightEffective) && root.activeDisplayHex === modelData.hex
                 readonly property bool isLight: Model.isLightColor(modelData.hex)
 
                 Rectangle {
@@ -727,7 +1052,6 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                      root.followTheme = false
                       root.setHex(modelData.hex)
                     }
                   }
@@ -761,7 +1085,7 @@ Item {
               width: Style.space(32)
               height: Style.space(32)
               radius: Style.space(6)
-              color: Model.colorValue(root.hex)
+              color: Model.colorValue(root.activeDisplayHex)
               border.width: 1
               border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.3)
               anchors.verticalCenter: parent.verticalCenter
@@ -779,7 +1103,7 @@ Item {
             TextField {
               id: hexField
               width: Style.space(120)
-              text: root.hex
+              text: root.activeDisplayHex
               maximumLength: 6
               font.capitalization: Font.AllUppercase
               validator: RegularExpressionValidator { regularExpression: /[0-9a-fA-F]{6}/ }
@@ -925,7 +1249,7 @@ Item {
             selected: root.batterySaver
             active: root.batterySaver
             onClicked: root.batterySaver = !root.batterySaver
-            tooltipText: "Cap brightness to 33% when battery is low (≤25%)"
+            tooltipText: "Turn off backlight after 15s idle & cap at 33% on low battery (≤25%)"
           }
 
           Button {
