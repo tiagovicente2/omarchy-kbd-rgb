@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Services.UPower
+import Quickshell.Hyprland
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
@@ -398,6 +399,9 @@ Item {
       enqueue(["vrgb", "brightness", String(root.brightness)])
       feedSni()
     }
+    if (root.settingsLoaded && !root.hydrating) {
+      Quickshell.execDetached(["omarchy-osd", "-i", "keyboard", "-p", String(pct)])
+    }
     root.persistOnIdle = true
     scheduleSettingsSave()
   }
@@ -465,7 +469,20 @@ Item {
     function stepBrightness(delta: int): string {
       var next = Math.max(0, Math.min(100, root.brightness + delta))
       root.setBrightness(next)
+      Quickshell.execDetached(["omarchy-osd", "-i", "keyboard", "-p", String(root.brightness)])
       return String(root.brightness)
+    }
+    function cycleBrightness(): string {
+      var current = root.brightness
+      if (root.mode === "off") current = 0
+      var next = 33
+      if (current < 25) next = 33
+      else if (current < 55) next = 66
+      else if (current < 85) next = 100
+      else next = 0
+      root.setBrightness(next)
+      Quickshell.execDetached(["omarchy-osd", "-i", "keyboard", "-p", String(next)])
+      return String(next)
     }
     function togglePower(): string {
       if (root.mode === "off") {
@@ -531,7 +548,20 @@ Item {
     function stepBrightness(delta: int): string {
       var next = Math.max(0, Math.min(100, root.brightness + delta))
       root.setBrightness(next)
+      Quickshell.execDetached(["omarchy-osd", "-i", "keyboard", "-p", String(root.brightness)])
       return String(root.brightness)
+    }
+    function cycleBrightness(): string {
+      var current = root.brightness
+      if (root.mode === "off") current = 0
+      var next = 33
+      if (current < 25) next = 33
+      else if (current < 55) next = 66
+      else if (current < 85) next = 100
+      else next = 0
+      root.setBrightness(next)
+      Quickshell.execDetached(["omarchy-osd", "-i", "keyboard", "-p", String(next)])
+      return String(next)
     }
     function togglePower(): string {
       if (root.mode === "off") {
@@ -781,8 +811,25 @@ Item {
     }
   }
 
+  function unbindHardwareKeys() {
+    Quickshell.execDetached([
+      "hyprctl", "eval",
+      'hl.unbind("XF86KbdBrightnessUp"); hl.unbind("XF86KbdBrightnessDown"); hl.unbind("XF86KbdLightOnOff")'
+    ])
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (event && event.name === "configreloaded") {
+        root.unbindHardwareKeys()
+      }
+    }
+  }
+
   Component.onCompleted: {
     sniProc.running = true
+    root.unbindHardwareKeys()
   }
 
   // --------------------------------------------------------- control window

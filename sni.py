@@ -198,22 +198,17 @@ class KbdBrightnessSync:
                     dbus_interface=UPOWER_IFACE,
                     path=UPOWER_PATH,
                 )
-                self.sys_bus.add_signal_receiver(
-                    self.on_brightness_changed,
-                    signal_name="BrightnessChangedWithSource",
-                    dbus_interface=UPOWER_IFACE,
-                    path=UPOWER_PATH,
-                )
+
             except Exception:
                 self.iface = None
-
         # Record initial value
         init_val = self._read_current_raw()
         if init_val is not None:
             self.last_val = init_val
 
-        # 750ms fallback timer to catch direct ACPI sysfs changes without waking CPU unnecessarily
-        GLib.timeout_add(750, self._poll_sysfs)
+        # Poll sysfs for direct ACPI / hardware changes
+        GLib.timeout_add(200, self._poll_sysfs)
+
 
     def _read_current_raw(self):
         try:
